@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Inventory Management Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font family -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+        /* Custom styles for alert colors */
+        .alert-OK { background-color: #d1fae5; color: #065f46; border-left: 4px solid #10b981; }
+        .alert-LOW { background-color: #fffbeb; color: #b45309; border-left: 4px solid #f59e0b; }
+        .alert-CRITICAL { background-color: #fee2e2; color: #991b1b; border-left: 4px solid #ef4444; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-900 border-b-2 pb-2">
+                <span role="img" aria-label="Robot" class="mr-2">🤖</span> Smart Inventory Tracker
+            </h1>
+            <p class="text-gray-500 mt-1">Real-time stock levels powered by Computer Vision and Tracking (Simulated). </p>
+        </header>
+
+        <!-- Current Inventory Status -->
+        <section class="mb-10">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Current Stock Status</h2>
+            <div id="inventory-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Inventory cards will be injected here -->
+                <div class="bg-white p-6 rounded-xl shadow-lg animate-pulse h-40 flex items-center justify-center text-gray-400">Loading Inventory Data...</div>
+            </div>
+        </section>
+
+        <!-- Transaction History -->
+        <section>
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Recent Transactions</h2>
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Transaction rows will be injected here -->
+                        <tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Awaiting transaction data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Use an empty string for the API key as the environment provides it if needed
+        const apiKey = ""; 
+        const API_BASE_URL = window.location.origin; // Assumes API is on the same host
+        const INVENTORY_ENDPOINT = `${API_BASE_URL}/inventory/status`;
+        const TRANSACTION_ENDPOINT = `${API_BASE_URL}/inventory/transactions`;
+        const POLLING_INTERVAL_MS = 3000; // Update every 3 seconds
+
+        // --- Utility Functions for Exponential Backoff ---
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function fetchWithRetry(url, options = {}, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    const delay = Math.pow(2, i) * 1000; // Exponential delay: 1s, 2s, 4s, 8s, 16s
+                    if (i < maxRetries - 1) {
+                        await sleep(delay);
+                    } else {
+                        throw new Error(`Failed to fetch ${url} after ${maxRetries} attempts.`);
+                    }
+                }
+            }
+        }
+
+        // --- Rendering Functions ---
+
+        function renderInventory(inventoryData) {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = ''; // Clear existing content
+
+            if (!inventoryData || inventoryData.length === 0) {
+                grid.innerHTML = '<p class="col-span-full text-center text-gray-500">No inventory items being tracked.</p>';
+                return;
+            }
+
+            inventoryData.forEach(item => {
+                const isAlert = item.alert_status !== 'OK';
+                const alertClass = `alert-${item.alert_status}`;
+                const emoji = item.alert_status === 'CRITICAL' ? '🚨' : (item.alert_status === 'LOW' ? '⚠️' : '✅');
+
+                const card = `
+                    <div class="bg-white p-6 rounded-xl shadow-lg transition-all duration-300 ${alertClass} hover:shadow-xl transform hover:-translate-y-1">
+                        <div class="flex items-start justify-between">
+                            <h3 class="text-lg font-bold">${item.name}</h3>
+                            <span class="text-3xl">${emoji}</span>
+                        </div>
+                        <div class="mt-4">
+                            <p class="text-4xl font-extrabold">${item.current_stock}</p>
+                            <p class="text-sm font-medium text-gray-600 mt-1">Current Stock</p>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-gray-200 text-sm flex justify-between">
+                            <p class="font-medium">Min Stock Target:</p>
+                            <p class="font-semibold">${item.min_stock}</p>
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', card);
+            });
+        }
+
+        function renderTransactions(transactions) {
+            const tbody = document.getElementById('transactions-body');
+            tbody.innerHTML = ''; // Clear existing content
+
+            if (!transactions || transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No recent transactions recorded.</td></tr>';
+                return;
+            }
+
+            // Reverse the order to show the latest at the top
+            const recentTransactions = transactions.slice().reverse();
+
+            recentTransactions.forEach(tx => {
+                const colorClass = tx.action === 'ADDED' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold';
+                const sign = tx.action === 'ADDED' ? '+' : '-';
+                
+                const row = `
+                    <tr class="hover:bg-gray-50 transition-colors duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(tx.timestamp).toLocaleTimeString()}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${tx.item_name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm ${colorClass}">${tx.action}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm ${colorClass}">${sign}${tx.quantity_change}</td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // --- Main Polling Loop ---
+
+        async function updateDashboard() {
+            try {
+                // 1. Fetch Inventory Status (which also triggers a frame process in simulation)
+                const inventoryData = await fetchWithRetry(INVENTORY_ENDPOINT, apiKey ? { headers: { 'X-API-Key': apiKey } } : {});
+                renderInventory(inventoryData);
+
+                // 2. Fetch Transaction History
+                const transactionData = await fetchWithRetry(TRANSACTION_ENDPOINT, apiKey ? { headers: { 'X-API-Key': apiKey } } : {});
+                renderTransactions(transactionData);
+                
+            } catch (error) {
+                console.error("Dashboard update failed:", error);
+                const grid = document.getElementById('inventory-grid');
+                grid.innerHTML = `<div class="col-span-full bg-red-100 p-4 rounded-xl text-red-700">Error: Could not connect to the Inventory API. Check console for details.</div>`;
+            }
+
+            // Schedule the next update
+            setTimeout(updateDashboard, POLLING_INTERVAL_MS);
+        }
+
+        // Start the application when the window loads
+        window.onload = function() {
+            updateDashboard();
+        }
+    </script>
+</body>
+</html>
