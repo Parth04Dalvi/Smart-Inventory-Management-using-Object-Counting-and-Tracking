@@ -1,6 +1,8 @@
 # Smart-Inventory-Management-using-Object-Counting-and-Tracking
 Create a computer vision system that monitors and tracks inventory items in a simulated warehouse or retail setting to automate stock counts.   Technologies: Python, PyTorch/TensorFlow (for model training ), OpenCV, Flask/FastAPI (for serving the video stream and results), Graph Databases (for storing relationship data between items
 
+<img width="764" height="583" alt="image" src="https://github.com/user-attachments/assets/75b05c7d-c3f9-48a0-8d40-512f0c71400d" />
+
 🤖 Smart Inventory Management using Computer Vision
 
 Project Overview
